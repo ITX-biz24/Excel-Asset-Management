@@ -1,8 +1,25 @@
 # Excel Asset Management
 
-Excel and VBA-based asset management tool.
+![License](https://img.shields.io/github/license/ITX-biz24/Excel-Asset-Management)
+![Last Commit](https://img.shields.io/github/last-commit/ITX-biz24/Excel-Asset-Management)
+![Release](https://img.shields.io/github/v/release/ITX-biz24/Excel-Asset-Management)
+![Issues](https://img.shields.io/github/issues/ITX-biz24/Excel-Asset-Management)
 
-ExcelとVBAを使用した資産管理ツールです。
+An asset management tool built with Microsoft Excel and VBA.
+
+ExcelとVBAで開発された資産管理ツールです。
+
+---
+
+## 📸 Screenshot
+
+> *Coming soon.*
+
+<!--
+画像を追加したら次のように変更してください。
+
+![Main Screen](images/main.png)
+-->
 
 ---
 
@@ -10,8 +27,16 @@ ExcelとVBAを使用した資産管理ツールです。
 
 ### 概要
 
-Excelで資産を管理するためのツールです。
-VBAを使用して入力・検索・管理を効率化します。
+Excel上で資産情報を管理するためのアプリケーションです。
+VBAを活用し、資産情報の入力・検索・編集などを効率化します。
+
+### 主な機能
+
+- 資産情報の登録
+- 資産情報の編集
+- 資産情報の検索
+- VBAによる自動処理
+- Excelベースのシンプルな管理画面
 
 ### 動作環境
 
@@ -21,18 +46,17 @@ VBAを使用して入力・検索・管理を効率化します。
 
 ### 注意事項
 
-- **このワークブックの表示言語は日本語です。**
-- **通貨表示は日本円（JPY / ¥）を前提としています。**
-- **日本市場・日本の利用環境向けに設計されています。**
+- 本アプリケーションの表示言語は**日本語**です。
+- 通貨表示は**日本円（JPY / ¥）**を前提としています。
+- 日本国内での利用を想定して設計されています。
+- Excelでマクロを有効にしてご利用ください。
 
-### ファイル構成
+### 使用方法
 
-```text
-.
-├── Excel-Asset-Management.xlsx
-├── .gitignore
-└── README.md
-```
+1. リポジトリをダウンロードまたはクローンします。
+2. `Excel-Asset-Management.xlsx` を開きます。
+3. マクロを有効化します。
+4. 資産管理を開始します。
 
 ---
 
@@ -40,7 +64,15 @@ VBAを使用して入力・検索・管理を効率化します。
 
 ### Overview
 
-An asset management tool built with Microsoft Excel and VBA.
+Excel Asset Management is an asset management application built with Microsoft Excel and VBA.
+
+### Features
+
+- Register asset information
+- Edit asset information
+- Search asset information
+- VBA automation
+- Simple Excel-based interface
 
 ### Requirements
 
@@ -50,21 +82,55 @@ An asset management tool built with Microsoft Excel and VBA.
 
 ### Notes
 
-- **The workbook interface is available only in Japanese.**
-- **Currency formatting is configured for Japanese Yen (JPY / ¥).**
-- **This project is primarily designed for users in Japan.**
+- The workbook interface is available **only in Japanese**.
+- Currency formatting is configured for **Japanese Yen (JPY / ¥)**.
+- This project is primarily designed for users in Japan.
+- Please enable Excel macros before using the application.
 
-### Project Structure
+### Getting Started
+
+1. Clone or download this repository.
+2. Open `Excel-Asset-Management.xlsx`.
+3. Enable Excel macros.
+4. Start managing your assets.
+
+---
+
+## 📁 Repository Structure
 
 ```text
 .
 ├── Excel-Asset-Management.xlsx
 ├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
 ---
 
-## License
+## 🗺️ Roadmap
+
+Planned improvements include:
+
+- Data import/export
+- Backup & restore
+- Improved search functionality
+- Additional VBA automation
+- Better user interface
+- Charts and reports
+
+---
+
+## 🤝 Contributing
+
+Issues and suggestions are welcome.
+
+If you find a bug or have an idea for improvement, please open an Issue.
+
+---
+
+## 📄 License
 
 This project is licensed under the MIT License.
+
+See the [LICENSE](LICENSE) file for details.
