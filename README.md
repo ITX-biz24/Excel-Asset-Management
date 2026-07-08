@@ -13,7 +13,7 @@ ExcelとVBAで開発された資産管理ツールです。
 
 ## 📸 Screenshot
 
-> *Coming soon.*
+> ![Main Screen](images/main.png)
 
 <!--
 画像を追加したら次のように変更してください。
