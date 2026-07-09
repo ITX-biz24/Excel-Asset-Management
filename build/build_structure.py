@@ -172,6 +172,13 @@ def build_master(wb):
     add_table(ws, TB["account"], f"B{hdr_row}:E{hdr_row+len(accounts)}")
     put(ws, f"B{hdr_row-1}", "■ 口座", font_kw=dict(bold=True, color="teal"), align=T.LEFT)
 
+    # 残高プリセット（強制セット）: 初期残高を実残高として強制適用するボタン領域
+    btn_row = hdr_row + len(accounts) + 2   # 口座テーブルの下
+    button_cell(ws, f"B{btn_row}", "▶ 残高を強制セット", color="peach")
+    put(ws, f"B{btn_row+1}",
+        "「初期残高」＝プリセット残高。ボタンで取引履歴を消去し、現在残高を初期残高に強制リセット（履歴参照なし）。",
+        font_kw=dict(size=9, color="subtext"), align=T.LEFT)
+
     # --- カテゴリテーブル（区分で収入/支出を分類）---
     cat_hdr = 5
     put(ws, f"G{cat_hdr-1}", "■ カテゴリ", font_kw=dict(bold=True, color="teal"), align=T.LEFT)

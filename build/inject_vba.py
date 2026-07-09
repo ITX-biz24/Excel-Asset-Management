@@ -38,11 +38,13 @@ SH_TXN = "取引履歴"
 SH_DASH = "Dashboard"
 SH_FIXED = "固定収支"
 SH_SUB = "サブスク"
+SH_MASTER = "マスタ"
 
 # 注入する標準モジュール／クラス（ファイル名 → コンポーネント名）
 STD_MODULES = [
     "modConfig", "modUtils", "modInputCheck", "modFixed",
     "modSnapshot", "modMonth", "modBackup", "modProtect", "modUpdate",
+    "modPreset",
 ]
 
 # テーマ色
@@ -147,6 +149,9 @@ def add_buttons(wb):
     add_button(fixed, "B4", 120, 22, "▶ 今月へ反映", "ReflectFixedItems")
     sub = wb.Worksheets(SH_SUB)
     add_button(sub, "B4", 120, 22, "▶ 今月へ反映", "ReflectSubscriptions")
+
+    master = wb.Worksheets(SH_MASTER)
+    add_button(master, "B10", 150, 22, "▶ 残高を強制セット", "ForceSetBalances")
 
     dash = wb.Worksheets(SH_DASH)
     base = dash.Range("F2")

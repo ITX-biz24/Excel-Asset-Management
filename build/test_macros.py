@@ -111,6 +111,12 @@ def main():
             '  gSilent = False\n'
             '  T_Snapshot = "ok"\n'
             'End Function\n'
+            'Function T_ForceSet() As String\n'
+            '  gSilent = True\n'
+            '  ForceSetBalances\n'
+            '  gSilent = False\n'
+            '  T_ForceSet = "ok"\n'
+            'End Function\n'
         ).replace("\n", "\r\n")
         comp = wb.VBProject.VBComponents.Add(1)
         comp.Name = "modTestHelper"
@@ -140,6 +146,12 @@ def main():
         # スナップショット保存
         r = xl.Run("T_Snapshot")
         check("SaveMonthEndSnapshot 実行", str(r), "ok")
+
+        # 残高の強制プリセット（履歴クリア→現在残高=初期残高100*3=300）
+        xl.Run("T_ForceSet")
+        xl.CalculateFullRebuild()
+        check("ForceSetBalances 履歴クリア", txn_count(wb), 0)
+        check("ForceSetBalances 現在残高=初期残高300", round(float(xl.Run("TotalAssets"))), 300)
 
         wb.Close(False)   # 変更を破棄（原本は無傷）
 
