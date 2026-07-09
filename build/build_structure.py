@@ -335,6 +335,185 @@ def build_txn(wb):
 
 
 # ============================================================
+# ボタン風セル（COM で実ボタンを重ねる際のアンカー兼、視覚的アフォーダンス）
+# ============================================================
+def button_cell(ws, coord, label, color="accent"):
+    c = ws[coord]
+    c.value = label
+    c.font = T.font(size=11, bold=True, color="bg")
+    c.fill = T.fill(color)
+    c.alignment = T.CENTER
+    return c
+
+
+def _list_dv(ws, formula1, rng, allow_blank=True, title=None, error=None):
+    dv = DataValidation(type="list", formula1=formula1, allow_blank=allow_blank,
+                        showErrorMessage=bool(error), errorTitle=title, error=error)
+    dv.add(rng); ws.add_data_validation(dv)
+    return dv
+
+
+# ============================================================
+# 固定収支シート
+# ============================================================
+FIXED_ROWS = 40
+# (見出し, 列, 幅, 書式, 配置)
+FIXED_COLS = [
+    ("名称",     "B", 18, None,       T.LEFT),
+    ("種類",     "C", 8,  None,       T.CENTER),
+    ("金額",     "D", 13, T.FMT_YEN0, T.RIGHT),
+    ("支払日",   "E", 8,  T.FMT_INT,  T.CENTER),
+    ("口座",     "F", 10, None,       T.CENTER),
+    ("カテゴリ", "G", 11, None,       T.CENTER),
+    ("支払方法", "H", 11, None,       T.CENTER),
+    ("有効",     "I", 7,  None,       T.CENTER),
+    ("メモ",     "J", 22, None,       T.LEFT),
+]
+FIXED_DEMO = [
+    ("給与",   "収入", 250000, 25, "銀行", "給与",     "銀行振込", "ON", "月給"),
+    ("家賃",   "支出", 80000,  27, "銀行", "住居",     "口座引落", "ON", ""),
+    ("電気代", "支出", 6000,   15, "銀行", "水道光熱", "口座引落", "ON", ""),
+    ("携帯代", "支出", 6000,   10, "銀行", "通信",     "口座引落", "ON", ""),
+    ("保険",   "支出", 5000,   5,  "銀行", "保険",     "口座引落", "OFF", "見直し中"),
+]
+
+
+def build_fixed(wb):
+    ws = wb.create_sheet(SH["fixed"])
+    hide_grid(ws)
+    paint(ws, FIXED_ROWS + 12, 12)
+    ws.sheet_properties.tabColor = T.COL["mauve"]
+    title_block(ws, "固定収支", "毎月の定期的な収入・支出。ボタンで当月の取引履歴へ一括反映")
+    set_widths(ws, {"A": 2})
+    for name, col, w, *_ in FIXED_COLS:
+        ws.column_dimensions[col].width = w
+
+    # 反映ボタン（COMで実ボタンを重ねる）と当月合計
+    button_cell(ws, "B4", "▶ 今月へ反映", color="green")
+    put(ws, "D4", "固定支出/月:", font_kw=dict(color="subtext"), align=T.RIGHT)
+    put(ws, "E4", '=SUMIFS(T_Fixed[金額],T_Fixed[種類],"支出",T_Fixed[有効],"ON")',
+        font_kw=dict(bold=True, color="red"), align=T.LEFT, fmt=T.FMT_YEN0)
+    put(ws, "G4", "固定収入/月:", font_kw=dict(color="subtext"), align=T.RIGHT)
+    put(ws, "H4", '=SUMIFS(T_Fixed[金額],T_Fixed[種類],"収入",T_Fixed[有効],"ON")',
+        font_kw=dict(bold=True, color="green"), align=T.LEFT, fmt=T.FMT_YEN0)
+
+    hdr = 6
+    for name, col, w, *_ in FIXED_COLS:
+        put(ws, f"{col}{hdr}", name, font_kw=dict(bold=True, color="text"), align=T.CENTER)
+    first, last = hdr + 1, hdr + FIXED_ROWS
+    for r in range(first, last + 1):
+        idx = r - first
+        demo = FIXED_DEMO[idx] if idx < len(FIXED_DEMO) else None
+        for ci, (name, col, w, fmt, align) in enumerate(FIXED_COLS):
+            cell = ws[f"{col}{r}"]
+            if demo is not None:
+                v = demo[ci]
+                cell.value = v if v != "" else None
+            if fmt:
+                cell.number_format = fmt
+            cell.alignment = align
+    add_table(ws, TB["fixed"], f"B{hdr}:J{last}", style=TABLE_STYLE_DARK)
+    ws.freeze_panes = f"B{hdr+1}"
+
+    _list_dv(ws, "種類リスト", f"C{first}:C{last}")
+    _list_dv(ws, "口座リスト", f"F{first}:F{last}")
+    _list_dv(ws, "カテゴリリスト", f"G{first}:G{last}")
+    _list_dv(ws, "支払方法リスト", f"H{first}:H{last}")
+    _list_dv(ws, '"ON,OFF"', f"I{first}:I{last}")
+    dv_amt = DataValidation(type="decimal", operator="greaterThan", formula1="0",
+                            allow_blank=True)
+    dv_amt.add(f"D{first}:D{last}"); ws.add_data_validation(dv_amt)
+    dv_day = DataValidation(type="whole", operator="between", formula1="1", formula2="31",
+                            allow_blank=True, showErrorMessage=True, errorTitle="支払日",
+                            error="1〜31の日を入力してください")
+    dv_day.add(f"E{first}:E{last}"); ws.add_data_validation(dv_day)
+
+    # 有効=OFF はグレーアウト
+    ws.conditional_formatting.add(
+        f"B{first}:J{last}",
+        FormulaRule(formula=[f'$I{first}="OFF"'], font=Font(color=T.COL["muted"], italic=True)))
+    return ws
+
+
+# ============================================================
+# サブスクシート
+# ============================================================
+SUB_ROWS = 40
+SUB_COLS = [
+    ("名称",     "B", 20, None,       T.LEFT),
+    ("開始日",   "C", 12, T.FMT_DATE, T.CENTER),
+    ("支払日",   "D", 8,  T.FMT_INT,  T.CENTER),
+    ("金額",     "E", 12, T.FMT_YEN0, T.RIGHT),
+    ("支払方法", "F", 11, None,       T.CENTER),
+    ("口座",     "G", 10, None,       T.CENTER),
+    ("カテゴリ", "H", 11, None,       T.CENTER),
+    ("有効",     "I", 7,  None,       T.CENTER),
+    ("メモ",     "J", 20, None,       T.LEFT),
+]
+SUB_DEMO = [
+    ("Netflix", "2025-01-01", 15, 1490, "クレジット", "銀行", "サブスク", "ON", "動画"),
+    ("Spotify", "2025-03-01", 5,  980,  "クレジット", "銀行", "サブスク", "ON", "音楽"),
+    ("クラウド", "2026-01-01", 1,  500,  "QR決済",   "QR",   "サブスク", "OFF", "解約検討"),
+]
+
+
+def build_sub(wb):
+    ws = wb.create_sheet(SH["sub"])
+    hide_grid(ws)
+    paint(ws, SUB_ROWS + 12, 12)
+    ws.sheet_properties.tabColor = T.COL["peach"]
+    title_block(ws, "サブスク", "定期課金の管理。有効なものを当月の取引履歴へ反映")
+    set_widths(ws, {"A": 2})
+    for name, col, w, *_ in SUB_COLS:
+        ws.column_dimensions[col].width = w
+
+    button_cell(ws, "B4", "▶ 今月へ反映", color="green")
+    put(ws, "D4", "有効サブスク/月:", font_kw=dict(color="subtext"), align=T.RIGHT)
+    put(ws, "E4", '=SUMIFS(T_Sub[金額],T_Sub[有効],"ON")',
+        font_kw=dict(bold=True, color="peach"), align=T.LEFT, fmt=T.FMT_YEN0)
+    put(ws, "G4", "契約数(有効):", font_kw=dict(color="subtext"), align=T.RIGHT)
+    put(ws, "H4", '=COUNTIFS(T_Sub[有効],"ON")',
+        font_kw=dict(bold=True, color="text"), align=T.LEFT, fmt=T.FMT_INT)
+
+    hdr = 6
+    for name, col, w, *_ in SUB_COLS:
+        put(ws, f"{col}{hdr}", name, font_kw=dict(bold=True, color="text"), align=T.CENTER)
+    first, last = hdr + 1, hdr + SUB_ROWS
+    for r in range(first, last + 1):
+        idx = r - first
+        demo = SUB_DEMO[idx] if idx < len(SUB_DEMO) else None
+        for ci, (name, col, w, fmt, align) in enumerate(SUB_COLS):
+            cell = ws[f"{col}{r}"]
+            if demo is not None:
+                v = demo[ci]
+                if name == "開始日" and v:
+                    from datetime import datetime
+                    cell.value = datetime.strptime(v, "%Y-%m-%d")
+                else:
+                    cell.value = v if v != "" else None
+            if fmt:
+                cell.number_format = fmt
+            cell.alignment = align
+    add_table(ws, TB["sub"], f"B{hdr}:J{last}", style=TABLE_STYLE_DARK)
+    ws.freeze_panes = f"B{hdr+1}"
+
+    _list_dv(ws, "支払方法リスト", f"F{first}:F{last}")
+    _list_dv(ws, "口座リスト", f"G{first}:G{last}")
+    _list_dv(ws, "カテゴリリスト", f"H{first}:H{last}")
+    _list_dv(ws, '"ON,OFF"', f"I{first}:I{last}")
+    dv_amt = DataValidation(type="decimal", operator="greaterThan", formula1="0", allow_blank=True)
+    dv_amt.add(f"E{first}:E{last}"); ws.add_data_validation(dv_amt)
+    dv_day = DataValidation(type="whole", operator="between", formula1="1", formula2="31",
+                            allow_blank=True)
+    dv_day.add(f"D{first}:D{last}"); ws.add_data_validation(dv_day)
+
+    ws.conditional_formatting.add(
+        f"B{first}:J{last}",
+        FormulaRule(formula=[f'$I{first}="OFF"'], font=Font(color=T.COL["muted"], italic=True)))
+    return ws
+
+
+# ============================================================
 # 設定シート
 # ============================================================
 def build_config(wb):
@@ -381,6 +560,8 @@ def build():
     default = wb.active
 
     build_txn(wb)
+    build_fixed(wb)
+    build_sub(wb)
     build_master(wb)
     build_config(wb)
 
