@@ -34,11 +34,14 @@ A personal asset-management system built with Microsoft Excel and VBA.
 - **スナップショット**: 月末資産を記録し資産推移グラフの元データにする。
 - **マスタ / 設定**: 口座・カテゴリ・支払方法・対象年月などを一元管理。**口座は行を
   足すだけで追加**でき、数式は一切変更不要。
+- **残高の強制プリセット**: マスタの「初期残高」に実残高を入力し「残高を強制セット」
+  ボタンを押すと、取引履歴を消去して **現在残高＝初期残高** に強制リセット（過去履歴を
+  参照しない）。デモ値から実運用へ切り替えるときに使う。
 
 ### VBA（マクロ）
 
 翌月ロールオーバー / 固定・サブスク反映 / 月末スナップショット保存 / バックアップ /
-入力チェック / 数式保護 / ワンクリック更新 / 取引入力フォーム。
+入力チェック / 数式保護 / ワンクリック更新 / 取引入力フォーム / 残高の強制プリセット。
 
 ### 使い方
 
@@ -58,10 +61,13 @@ A personal asset-management system built with Microsoft Excel and VBA.
 ## 🇺🇸 English
 
 Open `Excel-Asset-Management.xlsm`, enable macros, and start tracking. Accounts are managed in
-the master sheet (add a row to add an account — no formula changes needed). The dashboard shows
-total assets, monthly income/expense/net, savings rate, and four charts. VBA provides month
-rollover, fixed/subscription posting, month-end snapshots, backup, input checks, formula
-protection, one-click refresh, and a transaction-entry form. Japanese UI, JPY currency.
+the master sheet (add a row to add an account — no formula changes needed). To force real
+balances, enter them in the master's "初期残高" column and click "残高を強制セット": the
+transaction history is wiped and each current balance is reset to its preset (no history is
+referenced). The dashboard shows total assets, monthly income/expense/net, savings rate, and
+four charts. VBA provides month rollover, fixed/subscription posting, month-end snapshots,
+backup, input checks, formula protection, one-click refresh, a transaction-entry form, and the
+forced balance preset. Japanese UI, JPY currency.
 
 ---
 
