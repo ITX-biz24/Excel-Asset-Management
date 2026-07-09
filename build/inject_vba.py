@@ -206,6 +206,12 @@ def theme_charts(wb):
             sc = ch.SeriesCollection()
             title = ch.ChartTitle.Text if ch.HasTitle else ""
             if "資産割合" in title:
+                # 円がタイトルに重ならないようプロットエリアを下げる
+                try:
+                    ch.PlotArea.Top = co.Height * 0.16
+                    ch.PlotArea.Height = co.Height * 0.80
+                except Exception:
+                    pass
                 s = sc(1)
                 for i in range(1, s.Points().Count + 1):
                     s.Points(i).Format.Fill.ForeColor.RGB = xlrgb(C_SERIES[(i - 1) % len(C_SERIES)])

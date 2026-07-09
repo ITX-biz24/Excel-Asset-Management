@@ -761,43 +761,45 @@ def build_charts(wb):
     mfirst, mlast = report._rng["month"]
     cfirst, clast = report._rng["cat"]
 
+    CH_H, CH_W = 7.6, 8.6
+
     # 資産割合（円）: マスタ 口座名(B6:B8) × 現在残高(E6:E8)
     pie = PieChart()
     pie.title = "資産割合"
-    pie.height, pie.width = 7.2, 8.4
+    pie.height, pie.width = CH_H, CH_W
     pie.add_data(Reference(master, min_col=5, min_row=6, max_row=8), titles_from_data=False)
     pie.set_categories(Reference(master, min_col=2, min_row=6, max_row=8))
-    dash.add_chart(pie, "B19")
+    dash.add_chart(pie, "B21")
 
     # カテゴリ別支出（横棒）: レポート カテゴリ × 当月支出
     barc = BarChart()
     barc.type = "bar"
     barc.title = "カテゴリ別支出（当月）"
-    barc.height, barc.width = 7.2, 8.4
+    barc.height, barc.width = CH_H, CH_W
     barc.legend = None
     barc.add_data(Reference(report, min_col=3, min_row=cfirst, max_row=clast), titles_from_data=False)
     barc.set_categories(Reference(report, min_col=2, min_row=cfirst, max_row=clast))
-    dash.add_chart(barc, "H19")
+    dash.add_chart(barc, "H21")
 
     # 月別収支（縦棒・収入/支出）: レポート 年月 × 収入,支出
     barm = BarChart()
     barm.type = "col"
     barm.title = "月別収支"
-    barm.height, barm.width = 7.2, 8.4
+    barm.height, barm.width = CH_H, CH_W
     barm.add_data(Reference(report, min_col=3, max_col=4, min_row=mfirst - 1, max_row=mlast),
                   titles_from_data=True)
     barm.set_categories(Reference(report, min_col=2, min_row=mfirst, max_row=mlast))
-    dash.add_chart(barm, "B35")
+    dash.add_chart(barm, "B38")
 
     # 資産推移（折れ線）: スナップ 年月 × 総資産
     line = LineChart()
     line.title = "資産推移"
-    line.height, line.width = 7.2, 8.4
+    line.height, line.width = CH_H, CH_W
     line.legend = None
     snap_last = 7  # 初期はseed1行のみ（VBAで増える）
     line.add_data(Reference(snap, min_col=3, min_row=7, max_row=snap_last), titles_from_data=False)
     line.set_categories(Reference(snap, min_col=2, min_row=7, max_row=snap_last))
-    dash.add_chart(line, "H35")
+    dash.add_chart(line, "H38")
 
 
 # ============================================================
