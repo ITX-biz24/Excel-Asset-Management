@@ -1,0 +1,6 @@
+# ビルド中間生成物（ソースから再生成できるため追跡しない）
+_structure.xlsx
+verify_out.txt
+check.txt
+__pycache__/
+*.pyc

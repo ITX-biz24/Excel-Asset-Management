@@ -16,6 +16,8 @@ from openpyxl import Workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 import theme as T
@@ -54,6 +56,12 @@ TB = {
 
 # 既定の対象年月（今日 2026-07 に合わせる）
 TARGET_YM = "2026-07"
+
+# 取引テーブルの確保行数（テーブルは入力で自動拡張するが余裕を持って確保）
+TXN_ROWS = 400
+
+# データテーブル用のダーク系スタイル（明色テーブルより地色に馴染む）
+TABLE_STYLE_DARK = "TableStyleDark9"
 
 
 # ============================================================
@@ -146,9 +154,10 @@ def build_master(wb):
         put(ws, f"C{r}", init, fill_c="input", align=T.RIGHT, fmt=T.FMT_YEN0)
         put(ws, f"D{r}", order, fill_c="input", align=T.CENTER)
         # 現在残高 = 初期残高 + 入金先合計 - 出金元合計（口座に依存しない一般式）
+        # 行内参照は openpyxl では [@..] が壊れるため明示セル参照を用いる（列全体参照は構造化のまま）
         put(ws, f"E{r}",
-            f"=[@初期残高]+SUMIFS({TB['txn']}[金額],{TB['txn']}[入金先],[@口座名])"
-            f"-SUMIFS({TB['txn']}[金額],{TB['txn']}[出金元],[@口座名])",
+            f"=C{r}+SUMIFS({TB['txn']}[金額],{TB['txn']}[入金先],B{r})"
+            f"-SUMIFS({TB['txn']}[金額],{TB['txn']}[出金元],B{r})",
             align=T.RIGHT, fmt=T.FMT_YEN)
     add_table(ws, TB["account"], f"B{hdr_row}:E{hdr_row+len(accounts)}")
     put(ws, f"B{hdr_row-1}", "■ 口座", font_kw=dict(bold=True, color="teal"), align=T.LEFT)
@@ -201,6 +210,131 @@ def build_master(wb):
 
 
 # ============================================================
+# 取引履歴シート（全集計の唯一の真実）
+# ============================================================
+# 列定義: (見出し, 列文字, 幅, 数値書式, 計算列か)
+TXN_COLS = [
+    ("日付",     "B", 12, T.FMT_DATE, False),
+    ("種類",     "C", 8,  None,       False),
+    ("出金元",   "D", 10, None,       False),
+    ("入金先",   "E", 10, None,       False),
+    ("金額",     "F", 13, T.FMT_YEN0, False),
+    ("カテゴリ", "G", 11, None,       False),
+    ("支払方法", "H", 11, None,       False),
+    ("メモ",     "I", 26, None,       False),
+    ("年月",     "J", 9,  T.FMT_YM,   True),
+]
+
+# デモデータ（利用者が削除して使い始める想定。2026-07）
+TXN_DEMO = [
+    # 日付,       種類,   出金元, 入金先, 金額,   カテゴリ,     支払方法,   メモ
+    ("2026-07-05", "収入", "",     "銀行", 250000, "給与",       "銀行振込", "7月給与"),
+    ("2026-07-02", "収入", "",     "QR",   8000,   "副業",       "QR決済",   "ポイント収入"),
+    ("2026-07-01", "支出", "銀行", "",     80000,  "住居",       "口座引落", "家賃"),
+    ("2026-07-03", "支出", "現金", "",     3200,   "食費",       "現金",     "スーパー"),
+    ("2026-07-04", "支出", "QR",   "",     1500,   "食費",       "QR決済",   "コンビニ"),
+    ("2026-07-06", "支出", "銀行", "",     6000,   "通信",       "口座引落", "携帯料金"),
+    ("2026-07-06", "支出", "QR",   "",     4800,   "娯楽",       "QR決済",   "映画"),
+    ("2026-07-08", "支出", "現金", "",     2500,   "食費",       "現金",     "ランチ"),
+    ("2026-07-08", "支出", "銀行", "",     12000,  "交際",       "クレジット", "飲み会"),
+    ("2026-07-07", "振替", "銀行", "現金", 30000,  "",           "銀行振込", "ATM出金"),
+]
+
+
+def build_txn(wb):
+    ws = wb.create_sheet(SH["txn"])
+    hide_grid(ws)
+    paint(ws, TXN_ROWS + 10, 12)
+    ws.sheet_properties.tabColor = T.COL["accent"]
+    title_block(ws, "取引履歴", "すべての残高・集計・グラフの元データ。1行=1取引")
+    set_widths(ws, {"A": 2})
+    for name, col, w, fmt, _ in TXN_COLS:
+        ws.column_dimensions[col].width = w
+
+    hdr = 6
+    # ヘッダ
+    for name, col, w, fmt, _ in TXN_COLS:
+        put(ws, f"{col}{hdr}", name, font_kw=dict(bold=True, color="text"), align=T.CENTER)
+    # データ行（デモ＋空行）に数式・書式を敷設
+    first, last = hdr + 1, hdr + TXN_ROWS
+    for r in range(first, last + 1):
+        idx = r - first
+        demo = TXN_DEMO[idx] if idx < len(TXN_DEMO) else None
+        for ci, (name, col, w, fmt, calc) in enumerate(TXN_COLS):
+            cell = ws[f"{col}{r}"]
+            if calc:  # 年月（計算列。行内参照は明示セル参照で堅牢化）
+                cell.value = f'=IF($B{r}="","",TEXT($B{r},"yyyy-mm"))'
+                cell.fill = T.fill("card")  # 計算列は控えめな面で自動生成を示す
+                cell.font = T.font(color="subtext")
+                cell.alignment = T.CENTER
+            elif demo is not None:
+                v = demo[ci]
+                if name == "日付" and v:
+                    from datetime import datetime
+                    cell.value = datetime.strptime(v, "%Y-%m-%d")
+                else:
+                    cell.value = v if v != "" else None
+            if fmt:
+                cell.number_format = fmt
+            if name in ("金額",):
+                cell.alignment = T.RIGHT
+            elif name in ("種類", "出金元", "入金先", "支払方法"):
+                cell.alignment = T.CENTER
+            elif name in ("日付",):
+                cell.alignment = T.CENTER
+
+    ref = f"B{hdr}:J{last}"
+    add_table(ws, TB["txn"], ref, style=TABLE_STYLE_DARK)
+    ws.freeze_panes = f"B{hdr+1}"
+
+    # --- 入力規則（一次防御。詳細な整合性チェックは VBA が担う）---
+    data_rng = f"C{first}:C{last}"
+    dv_kind = DataValidation(type="list", formula1="種類リスト", allow_blank=True,
+                             showErrorMessage=True, errorTitle="種類",
+                             error="収入 / 支出 / 振替 から選択してください")
+    dv_kind.add(data_rng); ws.add_data_validation(dv_kind)
+
+    dv_from = DataValidation(type="list", formula1="口座リスト", allow_blank=True)
+    dv_from.add(f"D{first}:D{last}"); ws.add_data_validation(dv_from)
+    dv_to = DataValidation(type="list", formula1="口座リスト", allow_blank=True)
+    dv_to.add(f"E{first}:E{last}"); ws.add_data_validation(dv_to)
+
+    dv_amt = DataValidation(type="decimal", operator="greaterThan", formula1="0",
+                            allow_blank=True, showErrorMessage=True,
+                            errorTitle="金額", error="金額は0より大きい値を入力してください")
+    dv_amt.add(f"F{first}:F{last}"); ws.add_data_validation(dv_amt)
+
+    dv_cat = DataValidation(type="list", formula1="カテゴリリスト", allow_blank=True)
+    dv_cat.add(f"G{first}:G{last}"); ws.add_data_validation(dv_cat)
+    dv_pay = DataValidation(type="list", formula1="支払方法リスト", allow_blank=True)
+    dv_pay.add(f"H{first}:H{last}"); ws.add_data_validation(dv_pay)
+
+    dv_date = DataValidation(type="date", operator="greaterThanOrEqual",
+                             formula1="DATE(2000,1,1)", allow_blank=True,
+                             showErrorMessage=True, errorTitle="日付",
+                             error="正しい日付を入力してください")
+    dv_date.add(f"B{first}:B{last}"); ws.add_data_validation(dv_date)
+
+    # --- 条件付き書式（種類で金額を色分け）---
+    ws.conditional_formatting.add(
+        f"C{first}:C{last}",
+        FormulaRule(formula=[f'$C{first}="収入"'], font=Font(color=T.COL["green"], bold=True)))
+    ws.conditional_formatting.add(
+        f"C{first}:C{last}",
+        FormulaRule(formula=[f'$C{first}="支出"'], font=Font(color=T.COL["red"], bold=True)))
+    ws.conditional_formatting.add(
+        f"C{first}:C{last}",
+        FormulaRule(formula=[f'$C{first}="振替"'], font=Font(color=T.COL["teal"], bold=True)))
+    ws.conditional_formatting.add(
+        f"F{first}:F{last}",
+        FormulaRule(formula=[f'$C{first}="収入"'], font=Font(color=T.COL["green"])))
+    ws.conditional_formatting.add(
+        f"F{first}:F{last}",
+        FormulaRule(formula=[f'$C{first}="支出"'], font=Font(color=T.COL["red"])))
+    return ws
+
+
+# ============================================================
 # 設定シート
 # ============================================================
 def build_config(wb):
@@ -246,14 +380,16 @@ def build():
     # 既定シートは最後に順序調整するため一旦保持
     default = wb.active
 
+    build_txn(wb)
     build_master(wb)
     build_config(wb)
 
     # 既定シートを削除（実シートを作り終えてから）
     wb.remove(default)
 
-    # シート表示順（左から）
-    order = [SH["master"], SH["config"]]
+    # シート表示順（左から）: ダッシュボード→取引→固定→サブスク→レポート→スナップ→マスタ→設定
+    order = [SH["dash"], SH["txn"], SH["fixed"], SH["sub"],
+             SH["report"], SH["snap"], SH["master"], SH["config"]]
     wb._sheets.sort(key=lambda s: order.index(s.title) if s.title in order else 99)
 
     wb.save(OUT_XLSX)
