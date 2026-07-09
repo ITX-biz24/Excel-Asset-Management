@@ -60,6 +60,16 @@ TARGET_YM = "2026-07"
 # 取引テーブルの確保行数（テーブルは入力で自動拡張するが余裕を持って確保）
 TXN_ROWS = 400
 
+# マスタ初期値（カテゴリ・支払方法はここが唯一の定義。build_master と report で共用）
+CATEGORIES = [
+    ("給与", "収入"), ("賞与", "収入"), ("副業", "収入"), ("その他収入", "収入"),
+    ("食費", "支出"), ("日用品", "支出"), ("住居", "支出"), ("水道光熱", "支出"),
+    ("通信", "支出"), ("交通", "支出"), ("娯楽", "支出"), ("交際", "支出"),
+    ("医療", "支出"), ("教育", "支出"), ("保険", "支出"), ("サブスク", "支出"),
+    ("その他支出", "支出"),
+]
+PAYS = ["現金", "クレジット", "銀行振込", "口座引落", "QR決済", "デビット", "電子マネー"]
+
 # データテーブル用のダーク系スタイル（明色テーブルより地色に馴染む）
 TABLE_STYLE_DARK = "TableStyleDark9"
 
@@ -169,13 +179,7 @@ def build_master(wb):
         fill_c="accent", align=T.CENTER)
     put(ws, f"H{cat_hdr}", "区分", font_kw=dict(bold=True, color="bg"),
         fill_c="accent", align=T.CENTER)
-    categories = [
-        ("給与", "収入"), ("賞与", "収入"), ("副業", "収入"), ("その他収入", "収入"),
-        ("食費", "支出"), ("日用品", "支出"), ("住居", "支出"), ("水道光熱", "支出"),
-        ("通信", "支出"), ("交通", "支出"), ("娯楽", "支出"), ("交際", "支出"),
-        ("医療", "支出"), ("教育", "支出"), ("保険", "支出"), ("サブスク", "支出"),
-        ("その他支出", "支出"),
-    ]
+    categories = CATEGORIES
     for j, (nm, kind) in enumerate(categories):
         r = cat_hdr + 1 + j
         put(ws, f"G{r}", nm, fill_c="input", align=T.LEFT)
@@ -187,7 +191,7 @@ def build_master(wb):
     put(ws, f"J{pay_hdr-1}", "■ 支払方法", font_kw=dict(bold=True, color="teal"), align=T.LEFT)
     put(ws, f"J{pay_hdr}", "支払方法", font_kw=dict(bold=True, color="bg"),
         fill_c="accent", align=T.CENTER)
-    pays = ["現金", "クレジット", "銀行振込", "口座引落", "QR決済", "デビット", "電子マネー"]
+    pays = PAYS
     for j, nm in enumerate(pays):
         put(ws, f"J{pay_hdr+1+j}", nm, fill_c="input", align=T.LEFT)
     add_table(ws, TB["pay"], f"J{pay_hdr}:J{pay_hdr+len(pays)}")
@@ -552,6 +556,251 @@ def build_config(wb):
 
 
 # ============================================================
+# スナップショットシート（資産推移の元データ）
+# ============================================================
+def build_snap(wb):
+    ws = wb.create_sheet(SH["snap"])
+    hide_grid(ws)
+    paint(ws, 60, 10)
+    ws.sheet_properties.tabColor = T.COL["teal"]
+    title_block(ws, "スナップショット", "月末ごとの資産残高。VBA『月末保存』で追記され資産推移グラフの元になる")
+    set_widths(ws, {"A": 2, "B": 11, "C": 14, "D": 12, "E": 12, "F": 12})
+
+    hdr = 6
+    heads = ["年月", "総資産", "現金", "銀行", "QR"]
+    for i, h in enumerate(heads):
+        put(ws, f"{get_column_letter(2+i)}{hdr}", h,
+            font_kw=dict(bold=True, color="text"), align=T.CENTER)
+    # 初期行: 当月のライブ値（VBA が翌月以降を値として追記していく）
+    r = hdr + 1
+    put(ws, f"B{r}", "=対象年月", align=T.CENTER)
+    put(ws, f"C{r}", "=SUM(T_Account[現在残高])", align=T.RIGHT, fmt=T.FMT_YEN)
+    put(ws, f"D{r}", '=IFERROR(INDEX(T_Account[現在残高],MATCH("現金",T_Account[口座名],0)),0)',
+        align=T.RIGHT, fmt=T.FMT_YEN)
+    put(ws, f"E{r}", '=IFERROR(INDEX(T_Account[現在残高],MATCH("銀行",T_Account[口座名],0)),0)',
+        align=T.RIGHT, fmt=T.FMT_YEN)
+    put(ws, f"F{r}", '=IFERROR(INDEX(T_Account[現在残高],MATCH("QR",T_Account[口座名],0)),0)',
+        align=T.RIGHT, fmt=T.FMT_YEN)
+    add_table(ws, TB["snap"], f"B{hdr}:F{r}", style=TABLE_STYLE_DARK)
+    return ws
+
+
+# ============================================================
+# レポートシート（月次・年間・ランキング）
+# ============================================================
+def build_report(wb):
+    ws = wb.create_sheet(SH["report"])
+    hide_grid(ws)
+    paint(ws, 60, 14)
+    ws.sheet_properties.tabColor = T.COL["yellow"]
+    title_block(ws, "レポート", "月次サマリ・年間履歴・カテゴリ/支払方法ランキング（グラフの元データ）")
+    set_widths(ws, {"A": 2, "B": 11, "C": 12, "D": 12, "E": 12, "F": 9, "G": 13,
+                    "H": 2, "I": 8, "J": 13, "K": 13, "L": 13})
+
+    def section(coord, text):
+        put(ws, coord, text, font_kw=dict(bold=True, color="teal"), align=T.LEFT)
+
+    def header_row(row, cols, start_col=2):
+        for i, h in enumerate(cols):
+            put(ws, f"{get_column_letter(start_col+i)}{row}", h,
+                font_kw=dict(bold=True, color="bg"), fill_c="accent", align=T.CENTER)
+
+    # --- 月次サマリ（24か月）---
+    section("B4", "■ 月次サマリ")
+    mhdr = 5
+    header_row(mhdr, ["年月", "収入", "支出", "収支", "貯蓄率", "月末総資産"])
+    mfirst, mlast = mhdr + 1, mhdr + 24
+    for r in range(mfirst, mlast + 1):
+        off = r - mfirst
+        put(ws, f"B{r}", f'=TEXT(EDATE(DATEVALUE(集計開始年月&"-01"),{off}),"yyyy-mm")',
+            align=T.CENTER, fill_c="card")
+        put(ws, f"C{r}", f'=SUMIFS(T_Txn[金額],T_Txn[種類],"収入",T_Txn[年月],$B{r})',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"D{r}", f'=SUMIFS(T_Txn[金額],T_Txn[種類],"支出",T_Txn[年月],$B{r})',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"E{r}", f"=C{r}-D{r}", align=T.RIGHT, fmt=T.FMT_YEN)
+        put(ws, f"F{r}", f'=IFERROR(E{r}/C{r},"")', align=T.CENTER, fmt=T.FMT_PCT)
+        put(ws, f"G{r}", f'=IFERROR(INDEX(T_Snap[総資産],MATCH($B{r},T_Snap[年月],0)),"")',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+
+    # --- 年間履歴（3年）---
+    section("I4", "■ 年間履歴")
+    yhdr = 5
+    header_row(yhdr, ["年", "年間収入", "年間支出", "年間貯蓄"], start_col=9)
+    yfirst, ylast = yhdr + 1, yhdr + 3
+    for r in range(yfirst, ylast + 1):
+        off = r - yfirst
+        put(ws, f"I{r}", f"=VALUE(LEFT(集計開始年月,4))+{off}", align=T.CENTER, fill_c="card")
+        put(ws, f"J{r}",
+            f'=SUMPRODUCT((LEFT(T_Txn[年月],4)=$I{r}&"")*(T_Txn[種類]="収入")*T_Txn[金額])',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"K{r}",
+            f'=SUMPRODUCT((LEFT(T_Txn[年月],4)=$I{r}&"")*(T_Txn[種類]="支出")*T_Txn[金額])',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"L{r}", f"=J{r}-K{r}", align=T.RIGHT, fmt=T.FMT_YEN)
+
+    # --- カテゴリランキング ---
+    ncat = len(CATEGORIES)
+    section("B31", "■ カテゴリ別支出ランキング")
+    chdr = 32
+    header_row(chdr, ["カテゴリ", "当月支出", "当年支出", "順位"])
+    cfirst, clast = chdr + 1, chdr + ncat
+    for r in range(cfirst, clast + 1):
+        idx = r - cfirst + 1
+        put(ws, f"B{r}", f'=IFERROR(INDEX(T_Category[カテゴリ],{idx}),"")', align=T.LEFT, fill_c="card")
+        put(ws, f"C{r}",
+            f'=IF($B{r}="",0,SUMIFS(T_Txn[金額],T_Txn[種類],"支出",T_Txn[カテゴリ],$B{r},T_Txn[年月],対象年月))',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"D{r}",
+            f'=IF($B{r}="",0,SUMPRODUCT((LEFT(T_Txn[年月],4)=LEFT(対象年月,4))*(T_Txn[種類]="支出")*(T_Txn[カテゴリ]=$B{r})*T_Txn[金額]))',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"E{r}", f'=IF(C{r}=0,"",RANK(C{r},$C${cfirst}:$C${clast}))',
+            align=T.CENTER, fmt=T.FMT_INT)
+
+    # --- 支払方法ランキング ---
+    npay = len(PAYS)
+    section("I31", "■ 支払方法別ランキング")
+    phdr = 32
+    header_row(phdr, ["支払方法", "当月支出", "順位"], start_col=9)
+    pfirst, plast = phdr + 1, phdr + npay
+    for r in range(pfirst, plast + 1):
+        idx = r - pfirst + 1
+        put(ws, f"I{r}", f'=IFERROR(INDEX(T_Pay[支払方法],{idx}),"")', align=T.LEFT, fill_c="card")
+        put(ws, f"J{r}",
+            f'=IF($I{r}="",0,SUMIFS(T_Txn[金額],T_Txn[種類],"支出",T_Txn[支払方法],$I{r},T_Txn[年月],対象年月))',
+            align=T.RIGHT, fmt=T.FMT_YEN0)
+        put(ws, f"K{r}", f'=IF(J{r}=0,"",RANK(J{r},$J${pfirst}:$J${plast}))',
+            align=T.CENTER, fmt=T.FMT_INT)
+
+    # チャート参照に使う範囲を属性として持たせる
+    ws._rng = dict(month=(mfirst, mlast), cat=(cfirst, clast))
+    return ws
+
+
+# ============================================================
+# ダッシュボードシート（KPIカード＋4グラフ）
+# ============================================================
+def _fill_rect(ws, c1, r1, c2, r2, color):
+    f = T.fill(color)
+    for r in range(r1, r2 + 1):
+        for c in range(c1, c2 + 1):
+            ws.cell(row=r, column=c).fill = f
+
+
+def _kpi_card(ws, col, row, span, label, formula, value_color, fmt, card_color="card"):
+    """ラベル(上)＋値(下・大)の2段カードを描く。"""
+    c2 = col + span - 1
+    _fill_rect(ws, col, row, c2, row + 3, card_color)
+    ws.merge_cells(start_row=row, start_column=col, end_row=row, end_column=c2)
+    lc = ws.cell(row=row, column=col)
+    lc.value = label
+    lc.font = T.font(size=10, color="subtext")
+    lc.alignment = T.LEFT
+    ws.merge_cells(start_row=row + 1, start_column=col, end_row=row + 3, end_column=c2)
+    vc = ws.cell(row=row + 1, column=col)
+    vc.value = formula
+    vc.font = T.font(size=20, bold=True, color=value_color)
+    vc.alignment = T.LEFT
+    vc.number_format = fmt
+
+
+def build_dashboard(wb):
+    ws = wb.create_sheet(SH["dash"])
+    hide_grid(ws)
+    paint(ws, 60, 16)
+    ws.sheet_properties.tabColor = T.COL["accent"]
+    ws.sheet_view.showRowColHeaders = False
+    title_block(ws, "資産ダッシュボード", "対象年月: （設定シートで変更）")
+    put(ws, "B3", '=" 対象年月 " & 対象年月', font_kw=dict(size=10, color="subtext"), align=T.LEFT)
+
+    # 列幅（カード用）
+    for c in range(2, 14):
+        ws.column_dimensions[get_column_letter(c)].width = 9
+    for gap in ("E", "I", "M"):
+        ws.column_dimensions[gap].width = 2
+    ws.column_dimensions["A"].width = 2
+
+    kpi = 'SUMIFS(T_Txn[金額],T_Txn[種類],"{k}",T_Txn[年月],対象年月)'
+    income = kpi.format(k="収入")
+    expense = kpi.format(k="支出")
+
+    # 1段目 KPI（総資産／今月収入／今月支出）
+    _kpi_card(ws, 2, 5, 3, "総資産", "=SUM(T_Account[現在残高])", "accent", T.FMT_YEN0, "card2")
+    _kpi_card(ws, 6, 5, 3, "今月収入", f"={income}", "green", T.FMT_YEN0)
+    _kpi_card(ws, 10, 5, 3, "今月支出", f"={expense}", "red", T.FMT_YEN0)
+    # 2段目 KPI（今月収支／貯蓄率／固定費）
+    _kpi_card(ws, 2, 10, 3, "今月収支", f"={income}-{expense}", "text", T.FMT_YEN, "card2")
+    _kpi_card(ws, 6, 10, 3, "今月の貯蓄率", f'=IFERROR(({income}-{expense})/{income},"")',
+              "yellow", T.FMT_PCT)
+    _kpi_card(ws, 10, 10, 3, "固定支出/月",
+              '=SUMIFS(T_Fixed[金額],T_Fixed[種類],"支出",T_Fixed[有効],"ON")', "peach", T.FMT_YEN0)
+    # 3段目 口座別残高（表示順で最大3口座を動的表示）
+    put(ws, "B15", "■ 口座別残高", font_kw=dict(bold=True, color="teal"), align=T.LEFT)
+    for i in range(3):
+        col = 2 + i * 4
+        nm = f'=IFERROR(INDEX(T_Account[口座名],MATCH({i+1},T_Account[表示順],0)),"")'
+        bal = f'=IFERROR(INDEX(T_Account[現在残高],MATCH({i+1},T_Account[表示順],0)),"")'
+        # ラベル行に口座名（式）、値行に残高（式）を配置
+        _kpi_card(ws, col, 16, 3, "", bal, "teal", T.FMT_YEN0)
+        ws.cell(row=16, column=col).value = nm
+
+    return ws
+
+
+# ============================================================
+# グラフ生成（openpyxl でデータ参照を作成。視覚のダーク化は COM 段階で実施）
+# ============================================================
+def build_charts(wb):
+    from openpyxl.chart import PieChart, BarChart, LineChart, Reference
+
+    dash = wb[SH["dash"]]
+    master = wb[SH["master"]]
+    report = wb[SH["report"]]
+    snap = wb[SH["snap"]]
+
+    mfirst, mlast = report._rng["month"]
+    cfirst, clast = report._rng["cat"]
+
+    # 資産割合（円）: マスタ 口座名(B6:B8) × 現在残高(E6:E8)
+    pie = PieChart()
+    pie.title = "資産割合"
+    pie.height, pie.width = 7.2, 8.4
+    pie.add_data(Reference(master, min_col=5, min_row=6, max_row=8), titles_from_data=False)
+    pie.set_categories(Reference(master, min_col=2, min_row=6, max_row=8))
+    dash.add_chart(pie, "B19")
+
+    # カテゴリ別支出（横棒）: レポート カテゴリ × 当月支出
+    barc = BarChart()
+    barc.type = "bar"
+    barc.title = "カテゴリ別支出（当月）"
+    barc.height, barc.width = 7.2, 8.4
+    barc.legend = None
+    barc.add_data(Reference(report, min_col=3, min_row=cfirst, max_row=clast), titles_from_data=False)
+    barc.set_categories(Reference(report, min_col=2, min_row=cfirst, max_row=clast))
+    dash.add_chart(barc, "H19")
+
+    # 月別収支（縦棒・収入/支出）: レポート 年月 × 収入,支出
+    barm = BarChart()
+    barm.type = "col"
+    barm.title = "月別収支"
+    barm.height, barm.width = 7.2, 8.4
+    barm.add_data(Reference(report, min_col=3, max_col=4, min_row=mfirst - 1, max_row=mlast),
+                  titles_from_data=True)
+    barm.set_categories(Reference(report, min_col=2, min_row=mfirst, max_row=mlast))
+    dash.add_chart(barm, "B35")
+
+    # 資産推移（折れ線）: スナップ 年月 × 総資産
+    line = LineChart()
+    line.title = "資産推移"
+    line.height, line.width = 7.2, 8.4
+    line.legend = None
+    snap_last = 7  # 初期はseed1行のみ（VBAで増える）
+    line.add_data(Reference(snap, min_col=3, min_row=7, max_row=snap_last), titles_from_data=False)
+    line.set_categories(Reference(snap, min_col=2, min_row=7, max_row=snap_last))
+    dash.add_chart(line, "H35")
+
+
+# ============================================================
 # メイン
 # ============================================================
 def build():
@@ -562,8 +811,12 @@ def build():
     build_txn(wb)
     build_fixed(wb)
     build_sub(wb)
+    build_snap(wb)
     build_master(wb)
     build_config(wb)
+    build_report(wb)      # 集計（マスタ名・スナップ参照）
+    build_dashboard(wb)   # KPIカード（全シート後）
+    build_charts(wb)      # グラフ（全データ範囲確定後）
 
     # 既定シートを削除（実シートを作り終えてから）
     wb.remove(default)

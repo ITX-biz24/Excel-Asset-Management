@@ -66,10 +66,12 @@ def verify(path):
         try:
             dash = wb.Worksheets("Dashboard")
             report("=== ダッシュボードKPI ===")
-            for label, addr in [("総資産", None)]:
-                pass
-        except Exception:
-            pass
+            for label, addr in [("総資産", "B6"), ("今月収入", "F6"),
+                                ("今月支出", "J6"), ("今月収支", "B11"),
+                                ("貯蓄率", "F11")]:
+                report(f"  {label:<8} = {dash.Range(addr).Text}")
+        except Exception as e:
+            report(f"  (KPI読取スキップ: {e})")
 
         report("=== エラーセル走査（数式セル）===")
         err_total = 0
